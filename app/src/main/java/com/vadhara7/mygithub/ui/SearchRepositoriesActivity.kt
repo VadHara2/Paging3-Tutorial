@@ -27,7 +27,12 @@ class SearchRepositoriesActivity : AppCompatActivity() {
         setContentView(view)
 
         // get the view model
-        val viewModel = ViewModelProvider(this, Injection.provideViewModelFactory(owner = this))
+        val viewModel = ViewModelProvider(
+            this, Injection.provideViewModelFactory(
+                context = this,
+                owner = this
+            )
+        )
             .get(SearchRepositoriesViewModel::class.java)
 
         // add dividers between RecyclerView's row items
@@ -50,8 +55,9 @@ class SearchRepositoriesActivity : AppCompatActivity() {
         uiActions: (UiAction) -> Unit
     ) {
         val repoAdapter = ReposAdapter()
+        val header = ReposLoadStateAdapter { repoAdapter.retry() }
         list.adapter = repoAdapter.withLoadStateHeaderAndFooter(
-            header = ReposLoadStateAdapter { repoAdapter.retry() },
+            header = header,
             footer = ReposLoadStateAdapter { repoAdapter.retry() }
         )
 
@@ -60,6 +66,7 @@ class SearchRepositoriesActivity : AppCompatActivity() {
             onQueryChanged = uiActions
         )
         bindList(
+            header = header,
             repoAdapter = repoAdapter,
             uiState = uiState,
             onScrollChanged = uiActions
@@ -105,6 +112,7 @@ class SearchRepositoriesActivity : AppCompatActivity() {
     }
 
     private fun ActivitySearchRepositoriesBinding.bindList(
+        header: ReposLoadStateAdapter,
         repoAdapter: ReposAdapter,
         uiState: StateFlow<UiState>,
         onScrollChanged: (UiAction.Scroll) -> Unit
@@ -162,16 +170,22 @@ class SearchRepositoriesActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             repoAdapter.loadStateFlow.collect { loadState ->
+                // Show a retry header if there was an error refreshing, and items were previously
+                // cached OR default to the default prepend state
+                header.loadState = loadState.mediator
+                    ?.refresh
+                    ?.takeIf { it is LoadState.Error && repoAdapter.itemCount > 0 }
+                    ?: loadState.prepend
+
                 val isListEmpty = loadState.refresh is LoadState.NotLoading && repoAdapter.itemCount == 0
                 // show empty list
                 emptyList.isVisible = isListEmpty
-                // Only show the list if refresh succeeds.
-                list.isVisible = !isListEmpty
+                // Only show the list if refresh succeeds, either from the the local db or the remote.
+                list.isVisible =  loadState.source.refresh is LoadState.NotLoading || loadState.mediator?.refresh is LoadState.NotLoading
                 // Show loading spinner during initial load or refresh.
-                progressBar.isVisible = loadState.source.refresh is LoadState.Loading
+                progressBar.isVisible = loadState.mediator?.refresh is LoadState.Loading
                 // Show the retry state if initial load or refresh fails.
-                retryButton.isVisible = loadState.source.refresh is LoadState.Error
-
+                retryButton.isVisible = loadState.mediator?.refresh is LoadState.Error && repoAdapter.itemCount == 0
                 // Toast on any error, regardless of whether it came from RemoteMediator or PagingSource
                 val errorState = loadState.source.append as? LoadState.Error
                     ?: loadState.source.prepend as? LoadState.Error

@@ -1,10 +1,12 @@
 package com.vadhara7.mygithub
 
 
+import android.content.Context
 import androidx.lifecycle.ViewModelProvider
 import androidx.savedstate.SavedStateRegistryOwner
 import com.vadhara7.mygithub.api.GithubService
 import com.vadhara7.mygithub.data.GithubRepository
+import com.vadhara7.mygithub.db.RepoDatabase
 import com.vadhara7.mygithub.ui.ViewModelFactory
 
 
@@ -14,20 +16,11 @@ import com.vadhara7.mygithub.ui.ViewModelFactory
  * testing, where needed.
  */
 object Injection {
-
-    /**
-     * Creates an instance of [GithubRepository] based on the [GithubService] and a
-     * [GithubLocalCache]
-     */
-    private fun provideGithubRepository(): GithubRepository {
-        return GithubRepository(GithubService.create())
+    private fun provideGithubRepository(context: Context): GithubRepository {
+        return GithubRepository(GithubService.create(), RepoDatabase.getInstance(context))
     }
 
-    /**
-     * Provides the [ViewModelProvider.Factory] that is then used to get a reference to
-     * [ViewModel] objects.
-     */
-    fun provideViewModelFactory(owner: SavedStateRegistryOwner): ViewModelProvider.Factory {
-        return ViewModelFactory(owner, provideGithubRepository())
+    fun provideViewModelFactory(context: Context, owner: SavedStateRegistryOwner): ViewModelProvider.Factory {
+        return ViewModelFactory(owner, provideGithubRepository(context))
     }
 }
